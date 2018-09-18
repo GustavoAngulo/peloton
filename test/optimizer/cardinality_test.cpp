@@ -24,7 +24,7 @@ TEST_F(CardinalityTest, EstimatedCardinalityTest) {
   const std::string test_table_name = "testtable";
   const int num_rows = 10;
   OptimizerTestUtil::CreateTable(test_table_name, num_rows);
-
+  OptimizerTestUtil::AnalyzeTable(test_table_name);
   auto plan = GeneratePlan("SELECT a from " + test_table_name + ";");
 
   EXPECT_EQ(num_rows, plan->GetCardinality());
@@ -35,6 +35,7 @@ TEST_F(CardinalityTest, EstimatedCardinalityTestWithPredicate) {
   const std::string test_table_name = "testtable";
   const int num_rows = 10;
   OptimizerTestUtil::CreateTable(test_table_name, num_rows);
+  OptimizerTestUtil::AnalyzeTable(test_table_name);
 
   auto plan = GeneratePlan("SELECT a from " + test_table_name + " WHERE " + "a < 10;");
 

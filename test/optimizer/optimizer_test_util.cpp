@@ -65,10 +65,9 @@ class OptimizerTestUtil : public PelotonTest {
     LOG_INFO("Analyzed %s", table_name.c_str());
   }
 
+  /* NOTE: Does not call analyze */
   void InsertData(const std::string &table_name, int num_tuples) {
     InsertDataHelper(table_name, num_tuples);
-
-    AnalyzeTable(table_name);
   }
 
   std::shared_ptr<planner::AbstractPlan> GeneratePlan(const std::string query) {
@@ -107,14 +106,15 @@ class OptimizerTestUtil : public PelotonTest {
   void InsertDataHelper(const std::string &table_name, int tuple_count) {
     int batch_size = 1000;
     std::stringstream ss;
-    auto count = 0;
+    auto id = id_offset_table_[table_name];
+    auto initial_id = id;
     if (tuple_count > batch_size) {
       for (int i = 0; i < tuple_count; i += batch_size) {
         ss.str(std::string());
         ss << "INSERT INTO " << table_name << " VALUES ";
         for (int j = 1; j <= batch_size; j++) {
-          count++;
-          ss << "(" << count << ", 1.1, 'abcd')";
+          id++;
+          ss << "(" << id << ", 1.1, 'abcd')";
           if (j < batch_size) {
             ss << ",";
           }
@@ -126,17 +126,19 @@ class OptimizerTestUtil : public PelotonTest {
     } else {
       ss << "INSERT INTO " << table_name << " VALUES ";
       for (int i = 1; i <= tuple_count; i++) {
-        ss << "(" << i << ", 1.1, 'abcd')";
+        ss << "(" << id << ", 1.1, 'abcd')";
         if (i < tuple_count) {
           ss << ",";
         }
-        count++;
+        id++;
       }
       ss << ";";
       ResultType result = TestingSQLUtil::ExecuteSQLQuery(ss.str());
       EXPECT_EQ(result, peloton::ResultType::SUCCESS);
     }
-    LOG_INFO("Inserted %d rows into %s", count, table_name.c_str());
+    EXPECT_EQ(tuple_count, id - initial_id);
+    id_offset_table_[table_name] = id;
+    LOG_INFO("Inserted %d rows into %s", id - initial_id, table_name.c_str());
   }
 
   std::shared_ptr<planner::AbstractPlan> GeneratePlanHelper(
@@ -153,6 +155,8 @@ class OptimizerTestUtil : public PelotonTest {
   }
 
   std::unique_ptr<optimizer::AbstractOptimizer> optimizer_;
+  // Stores the largest id per table. Used for inserting
+  std::map<std::string, int> id_offset_table_;
 
 };
 }
