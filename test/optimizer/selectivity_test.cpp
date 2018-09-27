@@ -18,6 +18,7 @@
 #include "common/logger.h"
 #include "concurrency/transaction_manager_factory.h"
 #include "executor/testing_executor_util.h"
+#include "optimizer_test_util.cpp"
 #include "optimizer/stats/selectivity.h"
 #include "optimizer/stats/stats_storage.h"
 #include "optimizer/stats/table_stats.h"
@@ -33,17 +34,12 @@ namespace test {
 
 using namespace optimizer;
 
-class SelectivityTests : public PelotonTest {};
+class SelectivityTests : public OptimizerTestUtil {};
 
 const std::string TEST_TABLE_NAME = "test";
 
 // Equality checking accuracy offset
 const double DEFAULT_SELECTIVITY_OFFSET = 0.01;
-
-void CreateAndLoadTable() {
-  TestingSQLUtil::ExecuteSQLQuery(
-      "CREATE TABLE test(id INT PRIMARY KEY, b DECIMAL, c VARCHAR);");
-}
 
 // Utility function for compare approximate equality.
 void ExpectSelectivityEqual(double actual, double expected,
@@ -54,22 +50,13 @@ void ExpectSelectivityEqual(double actual, double expected,
 
 // Test range selectivity including >, <, >= and <= using uniform dataset
 TEST_F(SelectivityTests, RangeSelectivityTest) {
+
+  auto nrow = 100;
+  OptimizerTestUtil::CreateTable(TEST_TABLE_NAME, nrow);
+
+  // Create predicate (condition)
   auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
-  catalog::Catalog::GetInstance()->CreateDatabase(txn, DEFAULT_DB_NAME);
-  txn_manager.CommitTransaction(txn);
-
-  CreateAndLoadTable();
-
-  // Create **uniform** table stats
-  int nrow = 100;
-  for (int i = 1; i <= nrow; i++) {
-    std::stringstream ss;
-    ss << "INSERT INTO test VALUES (" << i << ", 1.1, 'abcd');";
-    TestingSQLUtil::ExecuteSQLQuery(ss.str());
-  }
-
-  txn = txn_manager.BeginTransaction();
   auto catalog = catalog::Catalog::GetInstance();
   auto database = catalog->GetDatabaseWithName(txn, DEFAULT_DB_NAME);
   auto table = catalog->GetTableWithName(txn,
@@ -79,7 +66,7 @@ TEST_F(SelectivityTests, RangeSelectivityTest) {
   txn_manager.CommitTransaction(txn);
   oid_t db_id = database->GetOid();
   oid_t table_id = table->GetOid();
-  std::string column_name = "test.id";  // first column
+  std::string column_name = "test.a";  // first column
   auto stats_storage = StatsStorage::GetInstance();
   txn = txn_manager.BeginTransaction();
   auto table_stats = stats_storage->GetTableStats(db_id, table_id, txn);
@@ -93,7 +80,7 @@ TEST_F(SelectivityTests, RangeSelectivityTest) {
   EXPECT_EQ(default_sel, DEFAULT_SELECTIVITY);
 
   // Run analyze
-  TestingSQLUtil::ExecuteSQLQuery("ANALYZE test");
+  OptimizerTestUtil::AnalyzeTable(TEST_TABLE_NAME);
 
   // Get updated table stats and check new selectivity
   txn = txn_manager.BeginTransaction();
@@ -109,10 +96,6 @@ TEST_F(SelectivityTests, RangeSelectivityTest) {
       Selectivity::ComputeSelectivity(table_stats, condition);
   ExpectSelectivityEqual(greater_than_sel, 0.75);
 
-  // Free the database
-  txn = txn_manager.BeginTransaction();
-  catalog::Catalog::GetInstance()->DropDatabaseWithName(txn, DEFAULT_DB_NAME);
-  txn_manager.CommitTransaction(txn);
 }
 
 // Test LIKE operator selectivity
@@ -165,12 +148,8 @@ TEST_F(SelectivityTests, LikeSelectivityTest) {
 }
 
 TEST_F(SelectivityTests, EqualSelectivityTest) {
-  auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
-  auto txn = txn_manager.BeginTransaction();
-  catalog::Catalog::GetInstance()->CreateDatabase(txn, DEFAULT_DB_NAME);
-  txn_manager.CommitTransaction(txn);
 
-  CreateAndLoadTable();
+  OptimizerTestUtil::CreateTable(TEST_TABLE_NAME);
 
   int nrow = 100;
   for (int i = 1; i <= nrow; i++) {
@@ -180,7 +159,8 @@ TEST_F(SelectivityTests, EqualSelectivityTest) {
     TestingSQLUtil::ExecuteSQLQuery(ss.str());
   }
 
-  txn = txn_manager.BeginTransaction();
+  auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+  auto txn = txn_manager.BeginTransaction();
   auto catalog = catalog::Catalog::GetInstance();
   auto database = catalog->GetDatabaseWithName(txn, DEFAULT_DB_NAME);
   auto table = catalog->GetTableWithName(txn,
@@ -205,7 +185,7 @@ TEST_F(SelectivityTests, EqualSelectivityTest) {
   EXPECT_EQ(sel, DEFAULT_SELECTIVITY);
 
   // Run analyze
-  TestingSQLUtil::ExecuteSQLQuery("ANALYZE test");
+  OptimizerTestUtil::AnalyzeTable(TEST_TABLE_NAME);
   txn = txn_manager.BeginTransaction();
   table_stats = stats_storage->GetTableStats(db_id, table_id, txn);
   txn_manager.CommitTransaction(txn);
@@ -227,25 +207,25 @@ TEST_F(SelectivityTests, EqualSelectivityTest) {
     std::stringstream ss;
     ss << "INSERT INTO test VALUES (" << i + 1000 << ", " << i % 7 + 4
        << ", 'string');";
-    TestingSQLUtil::ExecuteSQLQuery(ss.str());
+    EXPECT_EQ(peloton::ResultType::SUCCESS, TestingSQLUtil::ExecuteSQLQuery(ss.str()));
   }
   // these elements will not be in mcv
   for (int i = 1; i <= nrow; i++) {
     std::stringstream ss;
     ss << "INSERT INTO test VALUES (" << i + 2000 << ", " << i % 50 + 11
        << ", 'string');";
-    TestingSQLUtil::ExecuteSQLQuery(ss.str());
+    EXPECT_EQ(peloton::ResultType::SUCCESS, TestingSQLUtil::ExecuteSQLQuery(ss.str()));
   }
 
   // Run analyze
-  TestingSQLUtil::ExecuteSQLQuery("ANALYZE test");
+  OptimizerTestUtil::AnalyzeTable(TEST_TABLE_NAME);
   txn = txn_manager.BeginTransaction();
   table_stats = stats_storage->GetTableStats(db_id, table_id, txn);
   txn_manager.CommitTransaction(txn);
 
   // Check selectivity
   // equal, not in mcv
-  std::string column_name2 = "test.id";
+  std::string column_name2 = "test.a";
   type::Value value2 = type::ValueFactory::GetDecimalValue(20.0);
   ValueCondition condition2{column_name2, ExpressionType::COMPARE_EQUAL,
                             value2};
@@ -260,10 +240,6 @@ TEST_F(SelectivityTests, EqualSelectivityTest) {
   ExpectSelectivityEqual(eq_sel_nin_mcv, 0.0066, 0.01);
   ExpectSelectivityEqual(neq_sel_nin_mcv, 0.9933, 0.01);
 
-  // Free the database
-  txn = txn_manager.BeginTransaction();
-  catalog::Catalog::GetInstance()->DropDatabaseWithName(txn, DEFAULT_DB_NAME);
-  txn_manager.CommitTransaction(txn);
 }
 
 }  // namespace test

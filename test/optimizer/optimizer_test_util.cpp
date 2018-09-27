@@ -106,7 +106,7 @@ class OptimizerTestUtil : public PelotonTest {
   void InsertDataHelper(const std::string &table_name, int tuple_count) {
     int batch_size = 1000;
     std::stringstream ss;
-    auto id = id_offset_table_[table_name];
+    auto id = std::max(id_offset_table_[table_name], 1);
     auto initial_id = id;
     if (tuple_count > batch_size) {
       for (int i = 0; i < tuple_count; i += batch_size) {
