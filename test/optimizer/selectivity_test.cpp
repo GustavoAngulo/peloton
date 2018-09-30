@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <vector>
+#include <include/planner/abstract_scan_plan.h>
 
 #include "catalog/catalog.h"
 #include "catalog/column_catalog.h"
@@ -241,6 +242,30 @@ TEST_F(SelectivityTests, EqualSelectivityTest) {
   ExpectSelectivityEqual(neq_sel_nin_mcv, 0.9933, 0.01);
 
 }
+
+/*
+ * Tests that plans include estimated selectivities for predicates
+ */
+TEST_F(SelectivityTests, ExportSelectivityTest) {
+
+  auto nrows = 100;
+  OptimizerTestUtil::CreateTable(TEST_TABLE_NAME, nrows);
+
+  // Execute select, selectivity should be one since we have not run ANALYZE
+  std::stringstream ss;
+  ss << "SELECT a FROM " << TEST_TABLE_NAME << " WHERE a <= " << nrows / 4;
+  auto plan = OptimizerTestUtil::GeneratePlan(ss.str());
+  auto *scan_plan = reinterpret_cast<planner::AbstractScan *>(plan.get());
+  ExpectSelectivityEqual(scan_plan->GetPredicate()->GetEstimatedSelectivity(), 1);
+
+  // Execute ANALYZE, selectivity should now be correct
+  OptimizerTestUtil::AnalyzeTable(TEST_TABLE_NAME);
+  plan = OptimizerTestUtil::GeneratePlan(ss.str());
+  scan_plan = reinterpret_cast<planner::AbstractScan *>(plan.get());
+  LOG_INFO("Selectivity: %f", scan_plan->GetPredicate()->GetEstimatedSelectivity());
+  ExpectSelectivityEqual(scan_plan->GetPredicate()->GetEstimatedSelectivity(), 0.25);
+}
+
 
 }  // namespace test
 }  // namespace peloton
