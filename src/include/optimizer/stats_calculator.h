@@ -70,7 +70,7 @@ class StatsCalculator : public OperatorVisitor {
 
   double CalculateSelectivityForPredicate(
       const std::shared_ptr<TableStats> predicate_table_stats,
-      const expression::AbstractExpression *expr);
+      expression::AbstractExpression *expr);
 
   GroupExpression *gexpr_;
   ExprSet required_cols_;

@@ -91,7 +91,7 @@ class AbstractExpression : public Printable {
 
   virtual bool IsNullable() const;
 
-  const AbstractExpression *GetChild(int index) const {
+  AbstractExpression *GetChild(int index) const {
     return GetModifiableChild(index);
   }
 
@@ -132,6 +132,10 @@ class AbstractExpression : public Printable {
   void ClearParsedPredicates() { parsed_predicates.clear(); }
 
   /** accessors */
+
+  void SetEstimatedSelectivity(double selectivity) { estimated_selectivity_ = selectivity; }
+
+  double GetEstimatedSelectivity() const { return estimated_selectivity_; }
 
   ExpressionType GetExpressionType() const { return exp_type_; }
 
@@ -321,6 +325,11 @@ class AbstractExpression : public Printable {
 
   ///
   std::vector<storage::PredicateInfo> parsed_predicates;
+
+  /**
+   * @brief Selectivity estimate for predicate calculated by optimizer
+   */
+   double estimated_selectivity_ = 1.f;
 };
 
 // Equality Comparator class for Abstract Expression

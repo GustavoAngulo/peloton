@@ -263,10 +263,11 @@ size_t StatsCalculator::EstimateCardinalityForFilter(
 // predicate
 double StatsCalculator::CalculateSelectivityForPredicate(
     const std::shared_ptr<TableStats> predicate_table_stats,
-    const expression::AbstractExpression *expr) {
+    expression::AbstractExpression *expr) {
   double selectivity = 1.f;
   if (predicate_table_stats->GetColumnCount() == 0 ||
       predicate_table_stats->GetColumnStats(0)->num_rows == 0) {
+    expr->SetEstimatedSelectivity(selectivity);
     return selectivity;
   }
   // Base case : Column Op Val
@@ -340,6 +341,7 @@ double StatsCalculator::CalculateSelectivityForPredicate(
                     left_selectivity * right_selectivity;
     }
   }
+  expr->SetEstimatedSelectivity(selectivity);
   return selectivity;
 }
 
